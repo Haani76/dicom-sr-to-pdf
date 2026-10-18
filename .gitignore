@@ -1,0 +1,5 @@
+*.dcm
+*.DCM
+*.pdf
+*.html
+__pycache__/
