@@ -177,7 +177,8 @@ This tool renders that as a header, a *Findings* section, a context row "Finding
 4. Each file is converted in a few seconds. For each result you can:
    - **View**: preview it on the page, or open it in a new browser tab;
    - **Download** the PDF;
-   - **Download all (.zip)**: every converted PDF in one zip.
+   - **Download all (.zip)**: every converted PDF in one zip;
+   - **Remove** (on a file or in the preview) or **Remove all**: clears the file, its PDF and the preview from the page.
 
 Each file shows its status: converted (with page count), converted with a warning naming anything not shown, skipped (not an SR), or failed.
 

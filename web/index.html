@@ -112,7 +112,7 @@ footer { color: var(--muted); font-size: .88rem; padding: 0 0 40px; }
         <h2 id="res-h">Results</h2>
         <div class="actions">
           <button type="button" id="zip" disabled>Download all (.zip)</button>
-          <button type="button" id="clear">Clear</button>
+          <button type="button" id="clear">Remove all</button>
         </div>
       </div>
       <ul class="files" id="list"></ul>
@@ -124,6 +124,7 @@ footer { color: var(--muted); font-size: .88rem; padding: 0 0 40px; }
         <div class="actions">
           <a class="btn" id="pv-open" target="_blank" rel="noopener">Open in new tab</a>
           <a class="btn" id="pv-dl">Download</a>
+          <button type="button" id="pv-rm">Remove</button>
         </div>
       </div>
       <iframe id="pv-frame" title="PDF preview"></iframe>
@@ -211,6 +212,10 @@ function add(files) {
     const li = document.createElement("li");
     li.innerHTML = `<div><div class="fname"></div><div class="fmsg"><span class="spin"></span> ${ready ? "Waiting…" : "Waiting for the converter to load…"}</div></div><div class="actions"></div>`;
     li.querySelector(".fname").textContent = file.webkitRelativePath || file.relPath || file.name;
+    const rm = Object.assign(document.createElement("button"), { type: "button", textContent: "Remove" });
+    rm.setAttribute("aria-label", "Remove " + file.name + " and its PDF from this page");
+    rm.onclick = () => remove(id);
+    li.querySelector(".actions").append(rm);
     $("list").append(li);
     items.set(id, { name: file.name, file, li });
     queue.push(id);
@@ -248,12 +253,32 @@ function finish({ id, status, message, pdf, missing }) {
     const view = Object.assign(document.createElement("button"), { type: "button", textContent: "View" });
     view.onclick = () => show(id);
     const dl = Object.assign(document.createElement("a"), { className: "btn", href: it.url, download: pdfName(it.name), textContent: "Download" });
-    acts.append(view, dl);
+    acts.prepend(view, dl);
     if (previewId === null) show(id);
   } else {
     it.li.className = status === "skip" ? "" : "st-fail";
     msg.textContent = status === "skip" ? `Skipped: ${message}` : `✗ Failed: ${message}`;
   }
+  $("zip").disabled = ![...items.values()].some((i) => i.pdf);
+}
+
+// Drop every trace of a file: list row, preview, PDF data and its blob URL.
+function remove(id) {
+  const it = items.get(id);
+  if (!it) return;
+  if (it.url) URL.revokeObjectURL(it.url);
+  it.li.remove();
+  items.delete(id);
+  const q = queue.indexOf(id);
+  if (q >= 0) queue.splice(q, 1);
+  if (previewId === id) {
+    previewId = null;
+    $("preview").classList.remove("show");
+    $("pv-frame").removeAttribute("src");
+    $("pv-open").removeAttribute("href");
+    $("pv-dl").removeAttribute("href");
+  }
+  if (!items.size) $("results").hidden = true;
   $("zip").disabled = ![...items.values()].some((i) => i.pdf);
 }
 
@@ -287,17 +312,8 @@ $("zip").onclick = () => {
   worker.postMessage({ type: "zip", names, pdfs: done.map((i) => i.pdf) });
 };
 
-$("clear").onclick = () => {
-  for (const it of items.values()) if (it.url) URL.revokeObjectURL(it.url);
-  items.clear();
-  queue.length = 0;
-  $("list").replaceChildren();
-  $("results").hidden = true;
-  $("preview").classList.remove("show");
-  $("pv-frame").removeAttribute("src");
-  previewId = null;
-  $("zip").disabled = true;
-};
+$("clear").onclick = () => { for (const id of [...items.keys()]) remove(id); };
+$("pv-rm").onclick = () => remove(previewId);
 
 $("pick-files").onclick = () => $("files").click();
 $("pick-folder").onclick = () => $("folder").click();
