@@ -66,12 +66,23 @@ def context_value(item, details):
     return esc(getattr(item, "UID", ""))
 
 
+def fmt_num(v):
+    s = str(v if v is not None else "")
+    return s.rstrip("0").rstrip(".") if "." in s and "e" not in s.lower() else s
+
+
+def num_key(item):
+    """(concept name, value) used to spot a raw reading repeated as its 'mean chosen' copy."""
+    mv = item.MeasuredValueSequence[0] if getattr(item, "MeasuredValueSequence", None) else None
+    return code(item, "ConceptNameCodeSequence")[0], fmt_num(getattr(mv, "NumericValue", ""))
+
+
 def measurement_row(item, details):
     name = with_code(*code(item, "ConceptNameCodeSequence"), details)
     value = unit = ""
     if getattr(item, "MeasuredValueSequence", None):
         mv = item.MeasuredValueSequence[0]
-        value = getattr(mv, "NumericValue", "")
+        value = fmt_num(getattr(mv, "NumericValue", ""))
         unit = code(mv, "MeasurementUnitsCodeSequence")[1]  # UCUM code: cm, cm/s, ms
     mods = []
     for child in getattr(item, "ContentSequence", []):
@@ -85,8 +96,13 @@ def measurement_row(item, details):
 def render_items(seq, depth, details):
     """Render one ContentSequence level, grouping runs of measurements into tables."""
     out, rows, context, images = [], [], [], []
+    keys = []  # num_key per row, parallel to rows
+    after_section = False
 
     def flush():
+        if rows and after_section:
+            # without this, trailing measurements read as part of the section above
+            out.append(f"<h{min(depth + 2, 4)}>Measurements</h{min(depth + 2, 4)}>")
         if context:
             out.append("<table class='context'>" + "".join(context) + "</table>")
             context.clear()
@@ -95,11 +111,17 @@ def render_items(seq, depth, details):
                        "<th class='num'>Value</th><th>Unit</th><th>Qualifiers</th></tr></thead>"
                        + "".join(rows) + "</table>")
             rows.clear()
+            keys.clear()
 
     for item in seq:
         vt = getattr(item, "ValueType", "")
         if vt == "NUM":
+            key = num_key(item)
+            if not details and keys and keys[-1] == key:
+                rows.pop()  # same reading again (e.g. Mindray "mean value chosen"): keep the later one
+                keys.pop()
             rows.append(measurement_row(item, details))
+            keys.append(key)
         elif vt in CONTEXT_TYPES:
             name = with_code(*code(item, "ConceptNameCodeSequence"), details)
             context.append(f"<tr><td class='k'>{name}</td><td>{context_value(item, details)}</td></tr>")
@@ -111,6 +133,7 @@ def render_items(seq, depth, details):
             level = min(depth + 2, 4)
             out.append(f"<h{level}>{esc(code(item, 'ConceptNameCodeSequence')[0])}</h{level}>")
             out.extend(render_items(getattr(item, "ContentSequence", []), depth + 1, details))
+            after_section = True
     flush()
     if images:
         note = f"{len(images)} referenced image{'s' if len(images) > 1 else ''}"

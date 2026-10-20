@@ -50,6 +50,7 @@ def make_sr(path):
     section = item("CONTAINER", "CONTAINS", ("121070", "DCM", "Findings"), ContentSequence=Sequence([
         item("CODE", "HAS OBS CONTEXT", ("G-C0E3", "SRT", "Finding Site"),
              ConceptCodeSequence=cd("T-45010", "SRT", "Carotid Artery")),
+        num(("11726-7", "LN", "Peak Systolic Velocity"), "85.300000", "cm/s"),  # raw reading
         num(("11726-7", "LN", "Peak Systolic Velocity"), "85.3", "cm/s",
             mods=[(("G-C171", "SRT", "Laterality"), ("G-A100", "SRT", "Right"))]),
         num(("11653-3", "LN", "End Diastolic Velocity"), "22.1", "cm/s"),
@@ -67,8 +68,10 @@ def test_html_has_header_table_and_modifiers(tmp_path):
                  "Carotid Artery", "1 referenced image"):
         assert text in html, text
     assert "1.2.3.4" not in html and "(G-A100, SRT)" not in html
+    assert html.count("Peak Systolic Velocity") == 1 and "85.300000" not in html
     detailed = build_html(make_sr(tmp_path / "b.dcm"), details=True)
     assert "1.2.3.4" in detailed and "G-A100" in detailed
+    assert detailed.count("Peak Systolic Velocity") == 2
 
 
 def test_batch_folder_skips_non_sr(tmp_path):
