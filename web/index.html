@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DICOM SR to PDF</title>
+<meta name="description" content="Convert DICOM Structured Reports (SR) to clean PDF reports in your browser. Files never leave your computer.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b4f6c'/%3E%3Cpath d='M9 7h9l5 5v13H9z' fill='%23fff'/%3E%3Cpath d='M12 16h8M12 19h8M12 22h5' stroke='%230b4f6c' stroke-width='1.6'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f5f7fa; --surface: #ffffff; --text: #1f2933; --muted: #52606d; --line: #d9e2ec;
+  --brand: #0b4f6c; --brand-ink: #ffffff; --accent: #e6f0f5; --ok: #1f7a4d; --warn: #9a6200; --err: #b42318;
+  --radius: 12px; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1720; --surface: #17222d; --text: #e4ebf1; --muted: #9aabbb; --line: #2a3a49;
+    --brand: #5fb3d6; --brand-ink: #0b1a24; --accent: #1c3242; --ok: #5cc993; --warn: #f0b44c; --err: #ff8a80;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--brand); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+header { padding: 40px 0 8px; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); margin: 0 0 6px; letter-spacing: -0.01em; }
+.lead { color: var(--muted); margin: 0 0 14px; max-width: 46em; }
+.badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.badges li { background: var(--accent); border-radius: 999px; padding: 4px 12px; font-size: .86rem; }
+main { padding: 20px 0 40px; display: grid; gap: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 34px 16px; text-align: center; transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--brand); background: var(--accent); }
+.drop p { margin: 6px 0; }
+.drop .big { font-size: 1.15rem; font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }
+button, .btn { font: inherit; font-size: .95rem; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+button.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); font-weight: 600; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, .btn:focus-visible, input:focus-visible + span { outline: 3px solid var(--brand); outline-offset: 2px; }
+.opt { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; justify-content: center; font-size: .93rem; color: var(--muted); }
+.opt input { margin-top: 4px; }
+.engine { font-size: .9rem; color: var(--muted); margin-top: 12px; text-align: center; min-height: 1.4em; }
+.engine.ready { color: var(--ok); }
+.engine.fatal { color: var(--err); }
+.list-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.list-head h2 { margin: 0; font-size: 1.15rem; }
+ul.files { list-style: none; margin: 0; padding: 0; }
+ul.files li { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.fname { font-weight: 600; word-break: break-all; }
+.fmsg { font-size: .86rem; color: var(--muted); }
+.st-ok .fmsg { color: var(--ok); } .st-warn .fmsg { color: var(--warn); } .st-fail .fmsg { color: var(--err); }
+.actions { display: flex; gap: 8px; }
+.preview { display: none; }
+.preview.show { display: block; }
+.preview iframe { width: 100%; height: 78vh; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.preview .list-head { margin-bottom: 8px; }
+.spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--brand); border-radius: 50%; display: inline-block; animation: s 0.8s linear infinite; vertical-align: -2px; }
+@keyframes s { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+section.info h2 { font-size: 1.15rem; margin-top: 0; }
+section.info details { border-top: 1px solid var(--line); padding: 10px 0; }
+section.info summary { cursor: pointer; font-weight: 600; }
+footer { color: var(--muted); font-size: .88rem; padding: 0 0 40px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>DICOM SR to PDF</h1>
+    <p class="lead">Turn DICOM Structured Reports, the measurement files saved by ultrasound, CT and MR machines, into clean, readable PDF reports. Drop one file or a whole exam folder and get PDFs to view or download.</p>
+    <ul class="badges">
+      <li>🔒 Files never leave your computer</li>
+      <li>No install, no sign-up</li>
+      <li>Single or batch</li>
+      <li>Free &amp; open source</li>
+    </ul>
+  </header>
+
+  <main>
+    <section class="card" aria-labelledby="up-h">
+      <h2 id="up-h" class="sr-only">Choose files</h2>
+      <div class="drop" id="drop">
+        <p class="big">Drop SR files or folders here</p>
+        <p class="fmsg">.dcm files, files without an extension, or a whole exam export. Non-SR files are skipped automatically.</p>
+        <div class="row">
+          <button class="primary" type="button" id="pick-files">Choose files</button>
+          <button type="button" id="pick-folder">Choose a folder</button>
+        </div>
+        <input type="file" id="files" multiple hidden>
+        <input type="file" id="folder" webkitdirectory multiple hidden>
+      </div>
+      <label class="opt">
+        <input type="checkbox" id="details">
+        <span><strong>Technical details:</strong> include coding-scheme codes, every raw reading, image UIDs and an appendix of all DICOM attributes.</span>
+      </label>
+      <p class="engine" id="engine" role="status"><span class="spin"></span> Loading the converter. This takes about 10 seconds the first time and is cached afterwards.</p>
+    </section>
+
+    <section class="card" id="results" hidden aria-labelledby="res-h">
+      <div class="list-head">
+        <h2 id="res-h">Results</h2>
+        <div class="actions">
+          <button type="button" id="zip" disabled>Download all (.zip)</button>
+          <button type="button" id="clear">Clear</button>
+        </div>
+      </div>
+      <ul class="files" id="list"></ul>
+    </section>
+
+    <section class="card preview" id="preview" aria-labelledby="pv-h">
+      <div class="list-head">
+        <h2 id="pv-h">Preview</h2>
+        <div class="actions">
+          <a class="btn" id="pv-open" target="_blank" rel="noopener">Open in new tab</a>
+          <a class="btn" id="pv-dl">Download</a>
+        </div>
+      </div>
+      <iframe id="pv-frame" title="PDF preview"></iframe>
+    </section>
+
+    <section class="card info" aria-labelledby="info-h">
+      <h2 id="info-h">About</h2>
+      <details>
+        <summary>What is a DICOM Structured Report?</summary>
+        <p>DICOM is the standard file format for medical imaging. Besides images, machines save a <strong>Structured Report (SR)</strong>: a file holding every measurement taken during the exam (diameters, velocities, times, volumes) as a tree of coded entries. Software reads it easily, but people need a DICOM viewer, and even then it shows as a raw list full of codes.</p>
+      </details>
+      <details>
+        <summary>What does this tool do?</summary>
+        <p>It reads the SR and lays it out as a report: a patient and study header, sections, and measurement tables with values, units and qualifiers such as laterality. It hides technical codes, trims trailing zeros (it never rounds), and shows identical repeated readings once. Every page has page numbers. Tick <em>Technical details</em> to see everything exactly as stored.</p>
+      </details>
+      <details>
+        <summary>Is my data safe?</summary>
+        <p>Yes. The converter runs <strong>inside your browser</strong>. Your files are not uploaded to any server, and the PDFs are created on your own device. The page only downloads the converter program itself (Python running in the browser, via the Pyodide project), and the browser caches it.</p>
+      </details>
+      <details>
+        <summary>Does it show everything in the file?</summary>
+        <p>After each conversion it checks that every name and value in the SR appears in the PDF. If anything can't be shown, that file is marked with a warning naming what's missing.</p>
+      </details>
+      <details>
+        <summary>Important</summary>
+        <p>The PDF is a readable rendering of the SR, <strong>not a signed clinical report</strong>, and it doesn't interpret the measurements.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    Open source: <a href="https://github.com/Haani76/dicom-sr-to-pdf">github.com/Haani76/dicom-sr-to-pdf</a>. A command-line version for batch work is available there too.
+    <span id="ver"></span>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const worker = new Worker("worker.js");
+const items = new Map();      // id -> {name, li, pdf?, url?}
+const queue = [];             // ids waiting for the worker
+let ready = false, busy = false, nextId = 0, previewId = null;
+
+worker.onmessage = ({ data }) => {
+  if (data.type === "ready") {
+    ready = true;
+    $("engine").className = "engine ready";
+    $("engine").textContent = "✓ Converter ready. Your files stay on this device.";
+    $("ver").textContent = `· Converter v${data.version}`;
+    pump();
+  } else if (data.type === "fatal") {
+    $("engine").className = "engine fatal";
+    $("engine").textContent = "The converter could not load. Check your internet connection and reload the page. (" + data.message.split("\n").pop() + ")";
+  } else if (data.type === "result") {
+    finish(data);
+    busy = false;
+    pump();
+  } else if (data.type === "zip") {
+    save(new Blob([data.zip], { type: "application/zip" }), "sr-reports.zip");
+  } else if (data.type === "zip-error") {
+    alert("Could not build the zip: " + data.message);
+  }
+};
+
+function pdfName(name) {
+  return name.replace(/\.(dcm|dicom)$/i, "") + ".pdf";
+}
+
+function add(files) {
+  if (!files.length) return;
+  $("results").hidden = false;
+  for (const file of files) {
+    const id = nextId++;
+    const li = document.createElement("li");
+    li.innerHTML = `<div><div class="fname"></div><div class="fmsg"><span class="spin"></span> ${ready ? "Waiting…" : "Waiting for the converter to load…"}</div></div><div class="actions"></div>`;
+    li.querySelector(".fname").textContent = file.webkitRelativePath || file.relPath || file.name;
+    $("list").append(li);
+    items.set(id, { name: file.name, file, li });
+    queue.push(id);
+  }
+  pump();
+}
+
+async function pump() {
+  if (!ready || busy || !queue.length) return;
+  busy = true;
+  const id = queue.shift();
+  const it = items.get(id);
+  if (!it) { busy = false; return pump(); }   // cleared meanwhile
+  it.li.querySelector(".fmsg").innerHTML = '<span class="spin"></span> Converting…';
+  const bytes = new Uint8Array(await it.file.arrayBuffer());
+  worker.postMessage({ type: "convert", id, bytes, details: $("details").checked }, [bytes.buffer]);
+}
+
+function finish({ id, status, message, pdf, missing }) {
+  const it = items.get(id);
+  if (!it) return;
+  const msg = it.li.querySelector(".fmsg");
+  if (status === "ok") {
+    it.pdf = pdf;
+    it.url = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+    const pages = (new TextDecoder("latin1").decode(pdf).match(/\/Type\s*\/Page[^s]/g) || []).length;
+    if (missing.length) {
+      it.li.className = "st-warn";
+      msg.textContent = `⚠ Converted, but not shown in PDF: ${missing.join(", ")}`;
+    } else {
+      it.li.className = "st-ok";
+      msg.textContent = `✓ Converted · ${pages} page${pages === 1 ? "" : "s"} · everything in the SR is included`;
+    }
+    const acts = it.li.querySelector(".actions");
+    const view = Object.assign(document.createElement("button"), { type: "button", textContent: "View" });
+    view.onclick = () => show(id);
+    const dl = Object.assign(document.createElement("a"), { className: "btn", href: it.url, download: pdfName(it.name), textContent: "Download" });
+    acts.append(view, dl);
+    if (previewId === null) show(id);
+  } else {
+    it.li.className = status === "skip" ? "" : "st-fail";
+    msg.textContent = status === "skip" ? `Skipped: ${message}` : `✗ Failed: ${message}`;
+  }
+  $("zip").disabled = ![...items.values()].some((i) => i.pdf);
+}
+
+function show(id) {
+  const it = items.get(id);
+  previewId = id;
+  $("preview").classList.add("show");
+  $("pv-frame").src = it.url;
+  $("pv-open").href = it.url;
+  $("pv-dl").href = it.url;
+  $("pv-dl").download = pdfName(it.name);
+  $("pv-h").textContent = "Preview: " + pdfName(it.name);
+}
+
+function save(blob, name) {
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+$("zip").onclick = () => {
+  const done = [...items.values()].filter((i) => i.pdf);
+  const names = [], seen = new Map();
+  for (const i of done) {   // keep names unique inside the zip
+    let n = pdfName(i.name);
+    const k = seen.get(n) || 0;
+    seen.set(n, k + 1);
+    if (k) n = n.replace(/\.pdf$/, ` (${k + 1}).pdf`);
+    names.push(n);
+  }
+  worker.postMessage({ type: "zip", names, pdfs: done.map((i) => i.pdf) });
+};
+
+$("clear").onclick = () => {
+  for (const it of items.values()) if (it.url) URL.revokeObjectURL(it.url);
+  items.clear();
+  queue.length = 0;
+  $("list").replaceChildren();
+  $("results").hidden = true;
+  $("preview").classList.remove("show");
+  $("pv-frame").removeAttribute("src");
+  previewId = null;
+  $("zip").disabled = true;
+};
+
+$("pick-files").onclick = () => $("files").click();
+$("pick-folder").onclick = () => $("folder").click();
+$("files").onchange = (e) => { add([...e.target.files]); e.target.value = ""; };
+$("folder").onchange = (e) => { add([...e.target.files]); e.target.value = ""; };
+
+// Drag and drop, including whole folders.
+const drop = $("drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, () => drop.classList.remove("over")));
+drop.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.length) return add([...e.dataTransfer.files]);
+  const files = [];
+  async function walk(entry, path) {
+    if (entry.isFile) {
+      const f = await new Promise((res, rej) => entry.file(res, rej));
+      f.relPath = path + f.name;
+      files.push(f);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      let batch;
+      do {   // readEntries returns results in chunks
+        batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        for (const child of batch) await walk(child, path + entry.name + "/");
+      } while (batch.length);
+    }
+  }
+  for (const entry of entries) await walk(entry, "");
+  add(files);
+});
+</script>
+</body>
+</html>
