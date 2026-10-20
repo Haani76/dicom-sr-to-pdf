@@ -2,14 +2,20 @@
 // Files are processed here, in the visitor's browser; nothing is uploaded anywhere.
 importScripts("https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js");
 
+const step = (n, label) => postMessage({ type: "progress", step: n, of: 4, label });
+
 const ready = (async () => {
+  step(1, "Starting the Python engine");
   const py = await loadPyodide();
+  step(2, "Loading the DICOM reader");
   await py.loadPackage(["micropip", "pillow", "ssl"]);
   const micropip = py.pyimport("micropip");
   await micropip.install(["pydicom==3.0.2", "reportlab==5.0.1", "html5lib", "pypdf", "arabic-reshaper"]);
+  step(3, "Loading the PDF writer");
   // xhtml2pdf's svglib dependency needs an lxml newer than Pyodide ships; reports contain no SVG.
   await micropip.install.callKwargs("xhtml2pdf==0.2.26", { deps: false });
 
+  step(4, "Preparing the converter");
   py.FS.mkdirTree("/app/dicom_sr_to_pdf");
   for (const f of ["__init__.py", "report.py"]) {
     const res = await fetch(`dicom_sr_to_pdf/${f}`);

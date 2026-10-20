@@ -44,6 +44,10 @@ button:focus-visible, .btn:focus-visible, input:focus-visible + span { outline: 
 .engine { font-size: .9rem; color: var(--muted); margin-top: 12px; text-align: center; min-height: 1.4em; }
 .engine.ready { color: var(--ok); }
 .engine.fatal { color: var(--err); }
+.engine .hint { display: block; font-size: .82rem; margin-top: 2px; }
+.bar { height: 6px; max-width: 360px; margin: 8px auto 0; background: var(--line); border-radius: 999px; overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: var(--brand); transition: width .4s; }
+.engine.ready .bar, .engine.fatal .bar, .engine.ready .hint { display: none; }
 .list-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .list-head h2 { margin: 0; font-size: 1.15rem; }
 ul.files { list-style: none; margin: 0; padding: 0; }
@@ -96,7 +100,11 @@ footer { color: var(--muted); font-size: .88rem; padding: 0 0 40px; }
         <input type="checkbox" id="details">
         <span><strong>Technical details:</strong> include coding-scheme codes, every raw reading, image UIDs and an appendix of all DICOM attributes.</span>
       </label>
-      <p class="engine" id="engine" role="status"><span class="spin"></span> Loading the converter. This takes about 10 seconds the first time and is cached afterwards.</p>
+      <div class="engine" id="engine" role="status">
+        <span id="eng-text"><span class="spin"></span> Loading the converter…</span> <span id="eng-time"></span>
+        <span class="hint">First visit: about 10–20 seconds while it downloads (one time only). Later visits: a few seconds. You can add files now; they'll convert as soon as it's ready.</span>
+        <div class="bar" aria-hidden="true"><span id="eng-bar"></span></div>
+      </div>
     </section>
 
     <section class="card" id="results" hidden aria-labelledby="res-h">
@@ -159,14 +167,25 @@ const items = new Map();      // id -> {name, li, pdf?, url?}
 const queue = [];             // ids waiting for the worker
 let ready = false, busy = false, nextId = 0, previewId = null;
 
+const loadStart = performance.now();
+const clock = setInterval(() => {
+  $("eng-time").textContent = `(${Math.round((performance.now() - loadStart) / 1000)} s)`;
+}, 1000);
+
 worker.onmessage = ({ data }) => {
-  if (data.type === "ready") {
+  if (data.type === "progress") {
+    $("eng-text").innerHTML = `<span class="spin"></span> ${data.label}… <small>step ${data.step} of ${data.of}</small>`;
+    $("eng-bar").style.width = `${(data.step - 0.5) / data.of * 100}%`;
+  } else if (data.type === "ready") {
     ready = true;
+    clearInterval(clock);
     $("engine").className = "engine ready";
-    $("engine").textContent = "✓ Converter ready. Your files stay on this device.";
+    const secs = ((performance.now() - loadStart) / 1000).toFixed(1);
+    $("engine").textContent = `✓ Converter ready (loaded in ${secs} s). Your files stay on this device.`;
     $("ver").textContent = `· Converter v${data.version}`;
     pump();
   } else if (data.type === "fatal") {
+    clearInterval(clock);
     $("engine").className = "engine fatal";
     $("engine").textContent = "The converter could not load. Check your internet connection and reload the page. (" + data.message.split("\n").pop() + ")";
   } else if (data.type === "result") {
