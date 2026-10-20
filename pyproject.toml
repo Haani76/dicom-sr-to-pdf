@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dicom-sr-to-pdf"
+dynamic = ["version"]
+description = "Convert DICOM Structured Reports (SR) to clean, readable PDF reports"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["pydicom>=2.4", "xhtml2pdf>=0.2.11"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+dicom-sr-to-pdf = "dicom_sr_to_pdf.cli:main"
+
+[tool.setuptools]
+packages = ["dicom_sr_to_pdf"]
+
+[tool.setuptools.dynamic]
+version = { attr = "dicom_sr_to_pdf.__version__" }

@@ -1,33 +1,49 @@
-# DICOM SR to PDF
+# dicom-sr-to-pdf
 
-Converts a DICOM Structured Report (SR) into a PDF laid out like the SR view in MicroDICOM: patient/study header, teal section headers, and each measurement with its value, unit and modifiers.
+Convert DICOM Structured Reports (SR) into clean, readable A4 PDF reports. Works on single files or whole folders. Pure Python, no system dependencies.
 
-## How it works
+## What the PDF looks like
 
-1. Reads the SR with `pydicom`.
-2. Header: patient, study, protocol, manufacturer/model/serial, completion and verification flags, content date/time.
-3. Walks `ContentSequence` recursively:
-   - `CONTAINER` → teal section header
-   - `NUM` → bold concept name, value + unit, then `Concept Modifier` / `Properties` lines (code, scheme)
-   - `IMAGE` → referenced SOP Instance UID
-   - `CODE` / `TEXT` / `PNAME` / `DATE` / `TIME` / `DATETIME` → `Observation Context` lines
-4. Writes an HTML file and renders it to A4 PDF with `wkhtmltopdf`.
+- **Title** from the SR's root concept (e.g. *Vascular Ultrasound Procedure Report*)
+- **Header panel**: patient, ID, sex/DOB, accession, study, study date, institution, referring physician, device, completion/verification status (empty fields are omitted)
+- **Sections** for each `CONTAINER`, nested sub-sections as sub-headings
+- **Measurement tables** for `NUM` items: measurement, value, unit (UCUM), qualifiers (concept modifiers and properties such as laterality)
+- **Context** (`CODE`, `TEXT`, `PNAME`, `DATE`, `TIME`, `DATETIME`, `UIDREF`) as compact key/value rows
+- **Footer** on every page: generation time, tool version, page *x* of *y*
 
-## Setup
+Coding-scheme codes and referenced image UIDs are hidden by default; add `--details` to include them.
+
+## Install
 
 ```bash
-sudo apt install wkhtmltopdf
-pip install -r requirements.txt
+pip install git+https://github.com/Haani76/dicom-sr-to-pdf
 ```
+
+or from a clone: `pip install .`
 
 ## Usage
 
 ```bash
-python3 build_sr_pdf.py report.dcm            # -> report.pdf (+ report.html)
-python3 build_sr_pdf.py report.dcm out.pdf
+dicom-sr-to-pdf report.dcm                  # -> report.pdf next to the input
+dicom-sr-to-pdf report.dcm -o out/final.pdf # explicit output file
+dicom-sr-to-pdf exams/ -o pdfs/             # batch: every SR under exams/, recursively
+dicom-sr-to-pdf a.dcm b.dcm --details       # include codes and image UIDs
+dicom-sr-to-pdf report.dcm --html           # also keep the intermediate HTML
 ```
+
+`python -m dicom_sr_to_pdf ...` works too. In folder mode, files that are not DICOM SRs (images, DICOMDIR, other files) are skipped. One bad file never stops the batch. The exit code is non-zero if any file failed or nothing was converted.
+
+## Development
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+Tests build a synthetic SR with a fake patient, so no real data is needed.
 
 ## Notes
 
-- Tested on Mindray vascular ultrasound SRs.
-- Output contains patient data. Never commit `.dcm`, `.pdf` or `.html` outputs (excluded in `.gitignore`).
+- Tested on Mindray vascular ultrasound SRs and synthetic TID 5100-style reports.
+- The PDF is a readable rendering of SR content, **not a signed clinical report**.
+- Output contains patient data. Never commit `.dcm`, `.pdf` or `.html` files (they are excluded in `.gitignore`).
