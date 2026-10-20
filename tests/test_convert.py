@@ -4,7 +4,7 @@ from pydicom.sequence import Sequence
 from pydicom.uid import ExplicitVRLittleEndian, generate_uid
 
 from dicom_sr_to_pdf.cli import main
-from dicom_sr_to_pdf.report import build_html
+from dicom_sr_to_pdf.report import build_html, missing_values
 
 
 def cd(value, scheme, meaning):
@@ -65,7 +65,7 @@ def test_html_has_header_table_and_modifiers(tmp_path):
     html = build_html(make_sr(tmp_path / "a.dcm"))
     for text in ("Vascular Ultrasound Procedure Report", "Jane Test", "Findings",
                  "Peak Systolic Velocity", "85.3", "cm/s", "Laterality: Right",
-                 "Carotid Artery", "1 referenced image"):
+                 "Carotid Artery", "Referenced: Source (Image)"):
         assert text in html, text
     assert "1.2.3.4" not in html and "(G-A100, SRT)" not in html
     assert html.count("Peak Systolic Velocity") == 1 and "85.300000" not in html
@@ -93,30 +93,56 @@ def test_single_file_explicit_output(tmp_path):
     assert (tmp_path / "x" / "report.pdf").exists() and (tmp_path / "x" / "report.html").exists()
 
 
-def missing_values(ds, html):
-    """Every concept name and value in the SR tree that does not appear in the HTML."""
-    from html import escape
-
-    from dicom_sr_to_pdf.report import code, fmt_name, fmt_num
-
-    want = []
-
-    def walk(seq):
-        for it in seq:
-            want.append(code(it, "ConceptNameCodeSequence")[0])
-            want.extend(code(it, "ConceptCodeSequence")[:1])
-            want.append(getattr(it, "TextValue", ""))
-            want.append(fmt_name(getattr(it, "PersonName", "")))
-            for mv in getattr(it, "MeasuredValueSequence", []):
-                want.extend([fmt_num(mv.NumericValue), code(mv, "MeasurementUnitsCodeSequence")[1]])
-            for ref in getattr(it, "ReferencedSOPSequence", []):
-                want.append(ref.ReferencedSOPInstanceUID)
-            walk(getattr(it, "ContentSequence", []))
-
-    walk(ds.ContentSequence)
-    return sorted({w for w in map(str, want) if w and escape(w) not in html})
-
-
 def test_details_view_contains_every_value(tmp_path):
     ds = make_sr(tmp_path / "a.dcm")
-    assert missing_values(ds, build_html(ds, details=True)) == []
+    assert missing_values(ds, build_html(ds, details=True), details=True) == []
+    assert missing_values(ds, build_html(ds)) == []
+
+
+def make_complex_sr(path):
+    """SR using the less common content: coordinates, nesting under non-containers, by-reference."""
+    ds = make_sr(path)
+    img = Dataset()
+    img.ReferencedSOPClassUID, img.ReferencedSOPInstanceUID = "1.2.840.10008.5.1.4.1.1.6.1", "9.9.9"
+    img.ReferencedFrameNumber = [3]
+    outline = item("SCOORD", "INFERRED FROM", ("111030", "DCM", "Image Region"),
+                   GraphicType="POLYLINE", GraphicData=[1.0, 2.0, 3.0, 4.0],
+                   ContentSequence=Sequence([item("IMAGE", "SELECTED FROM", ("121112", "DCM", "Source"),
+                                                  ReferencedSOPSequence=Sequence([img]))]))
+    nan = Dataset()
+    nan_item = item("NUM", "CONTAINS", ("1", "99X", "Plaque Area"),
+                    MeasuredValueSequence=Sequence([]), NumericValueQualifierCodeSequence=cd("114000", "DCM", "Not a number"),
+                    ContentSequence=Sequence([outline]))
+    finding = item("CODE", "CONTAINS", ("121071", "DCM", "Finding"), ConceptCodeSequence=cd("1", "99X", "Stenosis"),
+                   ContentSequence=Sequence([
+                       item("TEXT", "HAS PROPERTIES", ("121106", "DCM", "Comment"), TextValue="Mild narrowing"),
+                       item("TCOORD", "INFERRED FROM", ("2", "99X", "Cardiac Phase"),
+                            TemporalRangeType="POINT", ReferencedTimeOffsets=[0.25])]))
+    composite = item("COMPOSITE", "CONTAINS", ("3", "99X", "Prior Report"), ReferencedSOPSequence=Sequence([img]))
+    byref = Dataset()
+    byref.RelationshipType, byref.ReferencedContentItemIdentifier = "INFERRED FROM", [1, 1, 2]
+    odd = item("FUTURETYPE", "CONTAINS", ("4", "99X", "Strange Item"))
+    ds.ContentSequence[0].ContentSequence.extend([nan_item, finding, composite, byref, odd])
+    del nan
+    ds.save_as(path, enforce_file_format=True)
+    return ds
+
+
+def test_uncommon_content_is_rendered_and_unknown_is_reported(tmp_path):
+    ds = make_complex_sr(tmp_path / "c.dcm")
+    html = build_html(ds, details=True)
+    for text in ("Plaque Area", "Not a number", "Image Region", "POLYLINE (2 points)", "9.9.9", "frames 3",
+                 "Finding", "Stenosis", "Mild narrowing", "Cardiac Phase", "POINT", "0.25",
+                 "Prior Report", "see content item 1.1.2", "Strange Item", "unsupported value type FUTURETYPE"):
+        assert text in html, text
+    assert missing_values(ds, html, details=True) == ["unsupported item type FUTURETYPE"]
+    assert "All DICOM attributes" in html and "StudyDescription" in html
+    plain = build_html(ds)
+    assert "All DICOM attributes" not in plain and "Comment: Mild narrowing" in plain
+    assert "Prior Report (Referenced object)" in plain
+
+
+def test_cli_warns_about_unshown_content(tmp_path, capsys):
+    make_complex_sr(tmp_path / "c.dcm")
+    assert main([str(tmp_path / "c.dcm")]) == 0
+    assert "not shown in PDF: unsupported item type FUTURETYPE" in capsys.readouterr().err

@@ -7,7 +7,7 @@ import pydicom
 from pydicom.errors import InvalidDicomError
 
 from . import __version__
-from .report import build_html, write_pdf
+from .report import build_html, missing_values, write_pdf
 
 
 def find_inputs(paths):
@@ -24,6 +24,9 @@ def convert(src, pdf_path, details=False, keep_html=False):
     if getattr(ds, "Modality", "") != "SR" or "ContentSequence" not in ds:
         raise ValueError("not a DICOM Structured Report")
     html = build_html(ds, details=details)
+    missing = missing_values(ds, html, details)
+    if missing:
+        print(f"WARN  {src}: not shown in PDF: {', '.join(missing)}", file=sys.stderr)
     Path(pdf_path).parent.mkdir(parents=True, exist_ok=True)
     if keep_html:
         Path(pdf_path).with_suffix(".html").write_text(html, encoding="utf-8")

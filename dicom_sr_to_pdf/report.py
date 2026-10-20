@@ -7,7 +7,6 @@ from xhtml2pdf import pisa
 from . import __version__
 
 SEX = {"M": "Male", "F": "Female", "O": "Other"}
-CONTEXT_TYPES = ("CODE", "TEXT", "PNAME", "DATE", "TIME", "DATETIME", "UIDREF")
 
 
 def esc(value):
@@ -48,8 +47,51 @@ def with_code(meaning, value, scheme, details):
         if details and value else esc(meaning)
 
 
-def context_value(item, details):
-    vt = item.ValueType
+KNOWN_TYPES = ("CONTAINER", "NUM", "CODE", "TEXT", "PNAME", "DATE", "TIME", "DATETIME", "UIDREF",
+               "IMAGE", "COMPOSITE", "WAVEFORM", "SCOORD", "SCOORD3D", "TCOORD")
+REF_TYPES = ("IMAGE", "COMPOSITE", "WAVEFORM")
+
+
+def fmt_num(v):
+    s = str(v if v is not None else "")
+    return s.rstrip("0").rstrip(".") if "." in s and "e" not in s.lower() else s
+
+
+def fmt_list(v):
+    if isinstance(v, str) or not hasattr(v, "__iter__"):
+        return fmt_num(v)
+    return ", ".join(fmt_num(x) for x in v)
+
+
+def num_parts(item):
+    """(value, unit) of a NUM item; value falls back to the qualifier (e.g. 'Not a number')."""
+    if getattr(item, "MeasuredValueSequence", None):
+        mv = item.MeasuredValueSequence[0]
+        # UCUM code: cm, cm/s, ms
+        return fmt_num(getattr(mv, "NumericValue", "")), code(mv, "MeasurementUnitsCodeSequence")[1]
+    return code(item, "NumericValueQualifierCodeSequence")[0], ""
+
+
+def ref_text(item, details):
+    label = {"IMAGE": "Image", "COMPOSITE": "Referenced object", "WAVEFORM": "Waveform"}[item.ValueType]
+    if not details:
+        return label
+    parts = []
+    for ref in getattr(item, "ReferencedSOPSequence", []):
+        parts.append(f"<span class='code'>{esc(getattr(ref, 'ReferencedSOPInstanceUID', ''))}</span>")
+        for attr, name in (("ReferencedFrameNumber", "frames"), ("ReferencedSegmentNumber", "segments"),
+                           ("ReferencedWaveformChannels", "channels")):
+            if attr in ref:
+                parts.append(f"{name} {esc(fmt_list(ref[attr].value))}")
+    return f"{label}: " + " ".join(parts)
+
+
+def value_text(item, details):
+    """Readable value of any SR content item, as HTML."""
+    vt = getattr(item, "ValueType", "")
+    if not vt and "ReferencedContentItemIdentifier" in item:
+        target = ".".join(str(x) for x in item.ReferencedContentItemIdentifier)
+        return f"see content item {esc(target)}"
     if vt == "CODE":
         return with_code(*code(item, "ConceptCodeSequence"), details)
     if vt == "TEXT":
@@ -63,39 +105,57 @@ def context_value(item, details):
     if vt == "DATETIME":
         dt = str(getattr(item, "DateTime", ""))
         return esc(f"{fmt_date(dt[:8])} {fmt_time(dt[8:])}".strip())
-    return esc(getattr(item, "UID", ""))
+    if vt == "UIDREF":
+        return esc(getattr(item, "UID", ""))
+    if vt == "NUM":
+        return esc(" ".join(x for x in num_parts(item) if x))
+    if vt in REF_TYPES:
+        return ref_text(item, details)
+    if vt in ("SCOORD", "SCOORD3D"):
+        pts = list(getattr(item, "GraphicData", []))
+        n = len(pts) // (3 if vt == "SCOORD3D" else 2)
+        text = f"{esc(getattr(item, 'GraphicType', ''))} ({n} point{'' if n == 1 else 's'})"
+        if details:
+            text += f" <span class='code'>[{esc(fmt_list(pts))}]</span>"
+        return text
+    if vt == "TCOORD":
+        text = esc(getattr(item, "TemporalRangeType", ""))
+        for attr in ("ReferencedSamplePositions", "ReferencedTimeOffsets", "ReferencedDateTime"):
+            if attr in item:
+                text += f" <span class='code'>{esc(fmt_list(item[attr].value))}</span>"
+        return text
+    if vt == "CONTAINER":
+        return ""
+    return f"[unsupported value type {esc(vt)}]"
 
 
-def fmt_num(v):
-    s = str(v if v is not None else "")
-    return s.rstrip("0").rstrip(".") if "." in s and "e" not in s.lower() else s
+def child_lines(item, details, indent=0):
+    """Every nested item below a non-container item, flattened to 'Name: value' lines."""
+    lines = []
+    for child in getattr(item, "ContentSequence", []):
+        name = with_code(*code(child, "ConceptNameCodeSequence"), details)
+        value = value_text(child, details)
+        pad = "&nbsp;&nbsp;" * indent
+        lines.append(f"{pad}{name}: {value}" if value and name else f"{pad}{name or value}")
+        lines.extend(child_lines(child, details, indent + 1))
+    return lines
 
 
 def num_key(item):
     """(concept name, value) used to spot a raw reading repeated as its 'mean chosen' copy."""
-    mv = item.MeasuredValueSequence[0] if getattr(item, "MeasuredValueSequence", None) else None
-    return code(item, "ConceptNameCodeSequence")[0], fmt_num(getattr(mv, "NumericValue", ""))
+    return code(item, "ConceptNameCodeSequence")[0], num_parts(item)[0]
 
 
 def measurement_row(item, details):
     name = with_code(*code(item, "ConceptNameCodeSequence"), details)
-    value = unit = ""
-    if getattr(item, "MeasuredValueSequence", None):
-        mv = item.MeasuredValueSequence[0]
-        value = fmt_num(getattr(mv, "NumericValue", ""))
-        unit = code(mv, "MeasurementUnitsCodeSequence")[1]  # UCUM code: cm, cm/s, ms
-    mods = []
-    for child in getattr(item, "ContentSequence", []):
-        if getattr(child, "RelationshipType", "") in ("HAS CONCEPT MOD", "HAS PROPERTIES"):
-            mods.append(f"{esc(code(child, 'ConceptNameCodeSequence')[0])}: "
-                        f"{with_code(*code(child, 'ConceptCodeSequence'), details)}")
+    value, unit = num_parts(item)
     return (f"<tr><td class='name'>{name}</td><td class='num'>{esc(value)}</td>"
-            f"<td>{esc(unit)}</td><td class='mods'>{'<br/>'.join(mods)}</td></tr>")
+            f"<td>{esc(unit)}</td><td class='mods'>{'<br/>'.join(child_lines(item, details))}</td></tr>")
 
 
 def render_items(seq, depth, details):
     """Render one ContentSequence level, grouping runs of measurements into tables."""
-    out, rows, context, images = [], [], [], []
+    out, rows, context, refs = [], [], [], []
     keys = []  # num_key per row, parallel to rows
     after_section = False
 
@@ -115,6 +175,7 @@ def render_items(seq, depth, details):
 
     for item in seq:
         vt = getattr(item, "ValueType", "")
+        name = with_code(*code(item, "ConceptNameCodeSequence"), details)
         if vt == "NUM":
             key = num_key(item)
             if not details and keys and keys[-1] == key:
@@ -122,25 +183,59 @@ def render_items(seq, depth, details):
                 keys.pop()
             rows.append(measurement_row(item, details))
             keys.append(key)
-        elif vt in CONTEXT_TYPES:
-            name = with_code(*code(item, "ConceptNameCodeSequence"), details)
-            context.append(f"<tr><td class='k'>{name}</td><td>{context_value(item, details)}</td></tr>")
-        elif vt == "IMAGE":
-            ref = item.ReferencedSOPSequence[0] if getattr(item, "ReferencedSOPSequence", None) else None
-            images.append((code(item, "ConceptNameCodeSequence")[0], getattr(ref, "ReferencedSOPInstanceUID", "")))
         elif vt == "CONTAINER":
             flush()
             level = min(depth + 2, 4)
-            out.append(f"<h{level}>{esc(code(item, 'ConceptNameCodeSequence')[0])}</h{level}>")
+            out.append(f"<h{level}>{name}</h{level}>")
             out.extend(render_items(getattr(item, "ContentSequence", []), depth + 1, details))
             after_section = True
+        elif vt in REF_TYPES and "ContentSequence" not in item:
+            refs.append((name, ref_text(item, details)))
+        else:
+            sub = child_lines(item, details)
+            extra = "<br/><span class='mods'>" + "<br/>".join(sub) + "</span>" if sub else ""
+            context.append(f"<tr><td class='k'>{name}</td><td>{value_text(item, details)}{extra}</td></tr>")
     flush()
-    if images:
-        note = f"{len(images)} referenced image{'s' if len(images) > 1 else ''}"
+    if refs:
         if details:
-            note += ":<br/>" + "<br/>".join(f"{esc(n)}: <span class='code'>{esc(u)}</span>" for n, u in images)
+            note = "Referenced images/objects:<br/>" + "<br/>".join(f"{n}: {t}" if n else t for n, t in refs)
+        else:
+            counts = {}
+            for n, t in refs:
+                counts[(n, t)] = counts.get((n, t), 0) + 1
+            note = "Referenced: " + "; ".join(
+                (f"{n} ({t}" if n else t) + (f" &times;{c}" if c > 1 else "") + (")" if n else "")
+                for (n, t), c in counts.items())
         out.append(f"<p class='images'>{note}</p>")
     return out
+
+
+def missing_values(ds, html, details=False):
+    """Names and values from the SR that do not appear in the rendered HTML (should be empty)."""
+    want = []
+
+    def walk(seq):
+        for it in seq:
+            vt = getattr(it, "ValueType", "")
+            want.append(code(it, "ConceptNameCodeSequence")[0])
+            if vt and vt not in KNOWN_TYPES:
+                want.append(f"unsupported item type {vt}")  # never in the HTML, so always reported
+            if vt == "CODE":
+                want.append(code(it, "ConceptCodeSequence")[0])
+            elif vt == "NUM":
+                want.extend(num_parts(it))
+            elif vt == "TEXT":
+                want.append(getattr(it, "TextValue", ""))
+            elif vt == "PNAME":
+                want.append(fmt_name(getattr(it, "PersonName", "")))
+            elif vt == "UIDREF":
+                want.append(getattr(it, "UID", ""))
+            elif details and vt in REF_TYPES:
+                want.extend(getattr(r, "ReferencedSOPInstanceUID", "") for r in getattr(it, "ReferencedSOPSequence", []))
+            walk(getattr(it, "ContentSequence", []))
+
+    walk(getattr(ds, "ContentSequence", []))
+    return sorted({w for w in map(str, want) if w and escape(w) not in html})
 
 
 CSS = """
@@ -157,6 +252,8 @@ table { width: 100%; }
 .header td { padding: 3pt 4pt 1pt 4pt; vertical-align: top; border: none; }
 .k { color: #52606d; width: 22%; }
 .context td { padding: 1pt 3pt; font-size: 8.5pt; }
+.attrs td { padding: 1pt 3pt; font-size: 7.5pt; vertical-align: top; }
+.attrs .k { width: 55%; color: #52606d; }
 .meas { margin-top: 3pt; }
 .meas th { background-color: #d9e2ec; color: #102a43; text-align: left; padding: 3pt 4pt 1pt 4pt; font-size: 8.5pt; }
 .meas td { padding: 3pt 4pt 1pt 4pt; border-bottom: 0.5px solid #d9e2ec; vertical-align: top; }
@@ -199,6 +296,10 @@ def build_html(ds, details=False):
     header_rows = "".join("<tr>" + "".join(cells[i:i + 2]) + "</tr>" for i in range(0, len(cells), 2))
     content_dt = f"{fmt_date(getattr(ds, 'ContentDate', ''))} {fmt_time(getattr(ds, 'ContentTime', ''))}".strip()
     body = "\n".join(render_items(getattr(ds, "ContentSequence", []), 0, details))
+    if details:
+        body += ("<h2>All DICOM attributes</h2><table class='attrs'>"
+                 + "".join(f"<tr><td class='k'>{esc(k)}</td><td>{esc(v)}</td></tr>" for k, v in attributes(ds))
+                 + "</table>")
     generated = datetime.now().strftime("%d %b %Y %H:%M")
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><title>{esc(title)}</title><style>{CSS}</style></head>
@@ -210,6 +311,23 @@ def build_html(ds, details=False):
 <div id="footer">Generated {generated} by dicom-sr-to-pdf {__version__} from the DICOM SR.
 Not a signed clinical report. &nbsp;&middot;&nbsp; Page <pdf:pagenumber/> of <pdf:pagecount/></div>
 </body></html>"""
+
+
+def attributes(ds, prefix=""):
+    """(name, value) for every non-empty attribute outside the SR content tree, sequences flattened."""
+    out = []
+    for el in ds:
+        if el.keyword in ("ContentSequence", "PixelData") or el.value in (None, "", b""):
+            continue
+        name = prefix + (el.keyword or f"Private {el.tag}")
+        if el.VR == "SQ":
+            for i, sub in enumerate(el.value, 1):
+                out += attributes(sub, f"{name}[{i}].")
+        elif isinstance(el.value, bytes):
+            out.append((name, f"<{len(el.value)} bytes>"))
+        else:
+            out.append((name, el.value))
+    return out
 
 
 def write_pdf(html, pdf_path):
