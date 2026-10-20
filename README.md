@@ -2,6 +2,14 @@
 
 Turn DICOM Structured Reports (SR), the measurement reports that ultrasound, CT, MR and other imaging machines save, into clean, readable A4 PDF reports. Works on single files or whole folders. Pure Python, no system dependencies.
 
+## ▶ Use it online, no install
+
+**<https://haani76.github.io/dicom-sr-to-pdf/>**
+
+Drop one SR file, several, or a whole exam folder. Within seconds you get PDFs to view in the browser or download, individually or as a zip. **Your files never leave your computer:** the converter runs inside your browser.
+
+Prefer the command line, or need to automate?
+
 ```bash
 pip install git+https://github.com/Haani76/dicom-sr-to-pdf
 dicom-sr-to-pdf report.dcm          # -> report.pdf
@@ -16,6 +24,7 @@ dicom-sr-to-pdf report.dcm          # -> report.pdf
 - [Background: what is a DICOM Structured Report?](#background-what-is-a-dicom-structured-report)
 - [What the tool does](#what-the-tool-does)
 - [Who it is for](#who-it-is-for)
+- [The web app](#the-web-app)
 - [Installation](#installation)
 - [Usage](#usage)
 - [What the PDF contains](#what-the-pdf-contains)
@@ -29,6 +38,7 @@ dicom-sr-to-pdf report.dcm          # -> report.pdf
 - [Limitations](#limitations)
 - [Troubleshooting / FAQ](#troubleshooting--faq)
 - [Development](#development)
+- [Hosting your own copy of the web app](#hosting-your-own-copy-of-the-web-app)
 - [Glossary](#glossary)
 
 ---
@@ -157,6 +167,24 @@ This tool renders that as a header, a *Findings* section, a context row "Finding
 
 ---
 
+## The web app
+
+**<https://haani76.github.io/dicom-sr-to-pdf/>** works in any modern browser (Chrome, Edge, Firefox, Safari) on Windows, macOS, Linux, Android or iOS.
+
+1. Open the page. The converter loads in the background: about 10 seconds the first time, near-instant afterwards because the browser caches it.
+2. Click **Choose files** or **Choose a folder**, or drag files or folders onto the page. Files without a `.dcm` extension are fine, and non-SR files are skipped.
+3. Optionally tick **Technical details** (the same as `--details` on the command line).
+4. Each file is converted in a few seconds. For each result you can:
+   - **View**: preview it on the page, or open it in a new browser tab;
+   - **Download** the PDF;
+   - **Download all (.zip)**: every converted PDF in one zip.
+
+Each file shows its status: converted (with page count), converted with a warning naming anything not shown, skipped (not an SR), or failed.
+
+**How it works and why it's private.** The page runs the same Python converter as the command-line tool, compiled for the browser with [Pyodide](https://pyodide.org). Your SR files are read and converted on your device. They are never uploaded, and the site has no server that could receive them. The only downloads are the converter program itself (from the Pyodide CDN and the Python package index) and this page.
+
+Note: some mobile browsers can't show PDFs inside a page. Use **Open in new tab** or **Download** there.
+
 ## Installation
 
 Requires **Python 3.9+**. Works on Windows, macOS and Linux.
@@ -279,16 +307,14 @@ Useful in scripts and scheduled jobs.
 ## Using it from Python
 
 ```python
-import pydicom
-from dicom_sr_to_pdf.report import build_html, missing_values, write_pdf
+from dicom_sr_to_pdf.report import render
 
-ds = pydicom.dcmread("report.dcm")
-html = build_html(ds, details=False)
-assert missing_values(ds, html) == []   # nothing dropped
-write_pdf(html, "report.pdf")
+html, pdf_bytes, missing = render("report.dcm", details=False)  # path or file-like object
+assert missing == []          # nothing dropped
+open("report.pdf", "wb").write(pdf_bytes)
 ```
 
-`build_html` returns plain HTML, so you can also show it in a web app or post-process it.
+`render` raises `ValueError` if the file is not an SR. `html` is plain HTML, so you can also show it in a web app or post-process it. For a dataset you've already loaded, use `build_html(ds)` and `missing_values(ds, html)`.
 
 ## How it works internally
 
@@ -297,6 +323,9 @@ dicom_sr_to_pdf/
 ├── cli.py       command line: finds inputs, skips non-SR, loops, reports ok/skip/WARN/FAIL
 ├── report.py    SR -> HTML (header, content tree, tables, styling) and HTML -> PDF
 └── __main__.py  enables `python -m dicom_sr_to_pdf`
+web/
+├── index.html   the web app: upload, results, preview, downloads
+└── worker.js    runs report.py in the browser (Pyodide), off the main thread
 tests/
 └── test_convert.py   builds synthetic SRs (fake patients) and checks the output
 ```
@@ -310,7 +339,7 @@ tests/
 
 SR files and the PDFs made from them contain **protected health information**: patient names, IDs, dates and institution.
 
-- Everything runs **locally**. The tool makes no network connections.
+- Everything runs **locally**. The command-line tool makes no network connections, and the web app converts inside your browser without uploading your files.
 - Don't commit `.dcm`, `.pdf` or `.html` files to version control. The included `.gitignore` excludes them.
 - Before sharing outputs for testing or support, use anonymised SRs. The test suite generates its own fake data for this reason.
 - The PDF is a **readable rendering** of the SR, **not a signed clinical report**, and it says so in every footer. Clinical sign-off belongs in your reporting system.
@@ -357,6 +386,20 @@ pytest
 ```
 
 Tests build synthetic SRs with fake patients. These cover common content plus rare cases (coordinates, time points, by-reference items, nested findings, non-numeric measurements, and an unknown value type), so no real data is needed.
+
+## Hosting your own copy of the web app
+
+The web app is static files (`web/index.html`, `web/worker.js`, plus the converter's `report.py` and `__init__.py`), so any static host works, free.
+
+**GitHub Pages (used by this repo).** `.github/workflows/pages.yml` runs the tests, assembles the site and publishes it on every push to `main`. One-time setup in a fork: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. The site appears at `https://<user>.github.io/<repo>/`.
+
+**Cloudflare Pages / Netlify / any static host.** Use this build command, with `_site` as the output directory:
+
+```bash
+mkdir -p _site/dicom_sr_to_pdf && cp web/* _site/ && cp dicom_sr_to_pdf/__init__.py dicom_sr_to_pdf/report.py _site/dicom_sr_to_pdf/
+```
+
+**Locally**, for development: run that command, then `python -m http.server -d _site` and open <http://localhost:8000>. Opening `index.html` directly from disk won't work, because browsers block web workers on `file://`.
 
 ## Glossary
 

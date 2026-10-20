@@ -1,7 +1,9 @@
 """Turn a DICOM Structured Report dataset into report HTML and PDF."""
+import io
 from datetime import datetime
 from html import escape
 
+import pydicom
 from xhtml2pdf import pisa
 
 from . import __version__
@@ -330,8 +332,13 @@ def attributes(ds, prefix=""):
     return out
 
 
-def write_pdf(html, pdf_path):
-    with open(pdf_path, "wb") as f:
-        result = pisa.CreatePDF(html, dest=f, encoding="utf-8")
-    if result.err:
-        raise RuntimeError(f"PDF rendering failed for {pdf_path}")
+def render(src, details=False):
+    """Read an SR (path or file-like) and return (html, pdf bytes, values missing from the PDF)."""
+    ds = pydicom.dcmread(src)
+    if getattr(ds, "Modality", "") != "SR" or "ContentSequence" not in ds:
+        raise ValueError("not a DICOM Structured Report")
+    html = build_html(ds, details=details)
+    buf = io.BytesIO()
+    if pisa.CreatePDF(html, dest=buf, encoding="utf-8").err:
+        raise RuntimeError("PDF rendering failed")
+    return html, buf.getvalue(), missing_values(ds, html, details)
