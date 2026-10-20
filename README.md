@@ -5,7 +5,7 @@ Convert DICOM Structured Reports (SR) into clean, readable A4 PDF reports. Works
 ## What the PDF looks like
 
 - **Title** from the SR's root concept (e.g. *Vascular Ultrasound Procedure Report*)
-- **Header panel**: patient, ID, sex/DOB, accession, study, study date, institution, referring physician, device, completion/verification status (empty fields are omitted)
+- **Header panel**: patient, ID, sex/DOB, accession, study, study ID, protocol, study date, institution, department, referring/performing physician, operator, device, serial number, software version, completion/verification status (empty fields are omitted)
 - **Sections** for each `CONTAINER`, nested sub-sections as sub-headings
 - **Measurement tables** for `NUM` items: measurement, value, unit (UCUM), qualifiers (concept modifiers and properties such as laterality)
 - **Every other item** (`CODE`, `TEXT`, `PNAME`, `DATE`, `TIME`, `DATETIME`, `UIDREF`, `SCOORD`, `SCOORD3D`, `TCOORD`, `COMPOSITE`, `WAVEFORM`, by-reference items) as key/value rows, with everything nested under it listed below
