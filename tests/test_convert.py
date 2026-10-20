@@ -91,3 +91,32 @@ def test_single_file_explicit_output(tmp_path):
     make_sr(tmp_path / "r.dcm")
     assert main([str(tmp_path / "r.dcm"), "-o", str(tmp_path / "x" / "report.pdf"), "--html"]) == 0
     assert (tmp_path / "x" / "report.pdf").exists() and (tmp_path / "x" / "report.html").exists()
+
+
+def missing_values(ds, html):
+    """Every concept name and value in the SR tree that does not appear in the HTML."""
+    from html import escape
+
+    from dicom_sr_to_pdf.report import code, fmt_name, fmt_num
+
+    want = []
+
+    def walk(seq):
+        for it in seq:
+            want.append(code(it, "ConceptNameCodeSequence")[0])
+            want.extend(code(it, "ConceptCodeSequence")[:1])
+            want.append(getattr(it, "TextValue", ""))
+            want.append(fmt_name(getattr(it, "PersonName", "")))
+            for mv in getattr(it, "MeasuredValueSequence", []):
+                want.extend([fmt_num(mv.NumericValue), code(mv, "MeasurementUnitsCodeSequence")[1]])
+            for ref in getattr(it, "ReferencedSOPSequence", []):
+                want.append(ref.ReferencedSOPInstanceUID)
+            walk(getattr(it, "ContentSequence", []))
+
+    walk(ds.ContentSequence)
+    return sorted({w for w in map(str, want) if w and escape(w) not in html})
+
+
+def test_details_view_contains_every_value(tmp_path):
+    ds = make_sr(tmp_path / "a.dcm")
+    assert missing_values(ds, build_html(ds, details=True)) == []

@@ -127,7 +127,7 @@ def render_items(seq, depth, details):
             context.append(f"<tr><td class='k'>{name}</td><td>{context_value(item, details)}</td></tr>")
         elif vt == "IMAGE":
             ref = item.ReferencedSOPSequence[0] if getattr(item, "ReferencedSOPSequence", None) else None
-            images.append(getattr(ref, "ReferencedSOPInstanceUID", ""))
+            images.append((code(item, "ConceptNameCodeSequence")[0], getattr(ref, "ReferencedSOPInstanceUID", "")))
         elif vt == "CONTAINER":
             flush()
             level = min(depth + 2, 4)
@@ -138,7 +138,7 @@ def render_items(seq, depth, details):
     if images:
         note = f"{len(images)} referenced image{'s' if len(images) > 1 else ''}"
         if details:
-            note += ":<br/>" + "<br/>".join(f"<span class='code'>{esc(u)}</span>" for u in images)
+            note += ":<br/>" + "<br/>".join(f"{esc(n)}: <span class='code'>{esc(u)}</span>" for n, u in images)
         out.append(f"<p class='images'>{note}</p>")
     return out
 
@@ -179,11 +179,18 @@ def build_html(ds, details=False):
         ("Sex / DOB", " / ".join(x for x in (sex, dob) if x)),
         ("Accession", getattr(ds, "AccessionNumber", "")),
         ("Study", getattr(ds, "StudyDescription", "")),
+        ("Study ID", getattr(ds, "StudyID", "")),
+        ("Protocol", getattr(ds, "ProtocolName", "")),
         ("Study date", f"{fmt_date(getattr(ds, 'StudyDate', ''))} {fmt_time(getattr(ds, 'StudyTime', ''))}".strip()),
         ("Institution", getattr(ds, "InstitutionName", "")),
+        ("Department", getattr(ds, "InstitutionalDepartmentName", "")),
         ("Referring", fmt_name(getattr(ds, "ReferringPhysicianName", ""))),
+        ("Performing", fmt_name(getattr(ds, "PerformingPhysicianName", ""))),
+        ("Operator", fmt_name(getattr(ds, "OperatorsName", ""))),
         ("Device", " ".join(str(x) for x in (getattr(ds, "Manufacturer", ""),
                                              getattr(ds, "ManufacturerModelName", "")) if x)),
+        ("Serial no.", getattr(ds, "DeviceSerialNumber", "")),
+        ("Software", getattr(ds, "SoftwareVersions", "")),
         ("Status", " / ".join(str(x).title() for x in (getattr(ds, "CompletionFlag", ""),
                                                       getattr(ds, "VerificationFlag", "")) if x)),
     ]
