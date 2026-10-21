@@ -182,7 +182,7 @@ worker.onmessage = ({ data }) => {
     clearInterval(clock);
     $("engine").className = "engine ready";
     const secs = ((performance.now() - loadStart) / 1000).toFixed(1);
-    $("engine").textContent = `✓ Converter ready (loaded in ${secs} s). Your files stay on this device.`;
+    $("engine").textContent = `✓ Converter ready (loaded in ${secs} s).`;
     $("ver").textContent = `· Converter v${data.version}`;
     pump();
   } else if (data.type === "fatal") {
