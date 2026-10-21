@@ -2,7 +2,7 @@
 
 Turn DICOM Structured Reports (SR), the measurement reports that ultrasound, CT, MR and other imaging machines save, into clean, readable A4 PDF reports. Works on single files or whole folders. Pure Python, no system dependencies.
 
-## ▶ Use it online, no install
+## Use it online, no install
 
 **<https://haani76.github.io/dicom-sr-to-pdf/>**
 
