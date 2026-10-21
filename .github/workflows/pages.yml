@@ -1,10 +1,18 @@
-# Publishes the browser version (web/ + the converter package) to GitHub Pages on every push to main.
+# Publishes the web app to GitHub Pages.
+#  - Every push to main publishes the latest version.
+#  - To switch the live site to any released version (older or newer), open
+#    Actions > "Deploy web app" > "Run workflow" and enter a tag such as v1.0.0.
 name: Deploy web app
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to publish, e.g. v1.0.0 (leave empty for the latest main)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -20,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -34,11 +44,20 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Assemble site
+        with:
+          ref: ${{ inputs.version || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build site
         run: |
-          mkdir -p _site/dicom_sr_to_pdf
-          cp web/* _site/
-          cp dicom_sr_to_pdf/__init__.py dicom_sr_to_pdf/report.py _site/dicom_sr_to_pdf/
+          if [ -f web/build_site.py ]; then
+            python web/build_site.py          # v1.1.0+: self-hosted, hash-verified runtime
+          else
+            mkdir -p _site/dicom_sr_to_pdf    # v1.0.0 layout
+            cp web/* _site/
+            cp dicom_sr_to_pdf/__init__.py dicom_sr_to_pdf/report.py _site/dicom_sr_to_pdf/
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,75 @@
+{
+  "pyodide_version": "0.27.7",
+  "pyodide": {
+    "pyodide.js": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js",
+      "sha256": "b4cb23a53aba19c221659b9fb40a2f18281d685691dc06647fb0afd0681baf98"
+    },
+    "pyodide.asm.js": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.asm.js",
+      "sha256": "6b4c90de5b7172873f04f21884d0e9d2274e305fe32116558fe3e4fbe3618d51"
+    },
+    "pyodide.asm.wasm": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.asm.wasm",
+      "sha256": "a50dd1843f805a0b7c45b61037ee0d7b26dfe85efe0e18ef95a34ad24e401f5f"
+    },
+    "python_stdlib.zip": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/python_stdlib.zip",
+      "sha256": "16611534726e5d8ac2bd8f926410b2dcb8d6f49aa24913463533b457a2115c16"
+    },
+    "pyodide-lock.json": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide-lock.json",
+      "sha256": "9c45b916001a750f4102fc287494f3eab215909c7535c626a20db80fd6333e2c"
+    },
+    "charset_normalizer-3.3.2-py3-none-any.whl": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/charset_normalizer-3.3.2-py3-none-any.whl",
+      "sha256": "b83440eee4a1398f9a71186169cdc17b84cdb93a63e61f3c6347dd1463a11fca"
+    },
+    "html5lib-1.1-py2.py3-none-any.whl": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/html5lib-1.1-py2.py3-none-any.whl",
+      "sha256": "8faa3cdcfaf78900c25c50552cae5ddea0898d985d676f4efb163e319975f6e7"
+    },
+    "openssl-1.1.1w.zip": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/openssl-1.1.1w.zip",
+      "sha256": "20b92cd9b9adb1a739af9f93772b60c084203aacf63ae1b2353951bd80c97f08"
+    },
+    "pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "43eab147a9355385a99eeac18fb577d4af2fe4bd0bbd23d3ba3ddb92e72c2815"
+    },
+    "six-1.16.0-py2.py3-none-any.whl": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/six-1.16.0-py2.py3-none-any.whl",
+      "sha256": "f61235bc3a15086f0369585e5071ae9ba0bd244a111d12b37f683862e6850c0a"
+    },
+    "ssl-1.0.0-cp312-cp312-pyodide_2024_0_wasm32.whl": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/ssl-1.0.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "1af0b011a3043331a8a2a358832dcee736deff73a55ad0393222ea533942094a"
+    },
+    "webencodings-0.5.1-py2.py3-none-any.whl": {
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/webencodings-0.5.1-py2.py3-none-any.whl",
+      "sha256": "87f31ffae209d3e24545feb75d17e18c1ac87bb8304cd21a73eca2939d05f08d"
+    }
+  },
+  "wheels": {
+    "pydicom-3.0.2-py3-none-any.whl": {
+      "url": "https://files.pythonhosted.org/packages/46/e0/60466c6d712dad2cf807df315e39863e91609ffd1064ecb835994460bbda/pydicom-3.0.2-py3-none-any.whl",
+      "sha256": "abf971a5440f84dbaf42c4b6758e30e62480902584f8b270b9a5d146e278a07b"
+    },
+    "reportlab-5.0.1-py3-none-any.whl": {
+      "url": "https://files.pythonhosted.org/packages/db/cb/dacbc268cb68d0428ea2cbd85266195a9ab3e677449589ddae59bd7542ac/reportlab-5.0.1-py3-none-any.whl",
+      "sha256": "1c36e6bb0e71780c72331eba60da7f602e8d4389a8723825af71342e49d791e8"
+    },
+    "pypdf-5.4.0-py3-none-any.whl": {
+      "url": "https://files.pythonhosted.org/packages/0b/27/d83f8f2a03ca5408dc2cc84b49c0bf3fbf059398a6a2ea7c10acfe28859f/pypdf-5.4.0-py3-none-any.whl",
+      "sha256": "db994ab47cadc81057ea1591b90e5b543e2b7ef2d0e31ef41a9bfe763c119dab"
+    },
+    "arabic_reshaper-3.0.0-py3-none-any.whl": {
+      "url": "https://files.pythonhosted.org/packages/44/fb/e20b45d81d74d810b01bff408baf8af04abf1d55a1a289c8395ad0919a7c/arabic_reshaper-3.0.0-py3-none-any.whl",
+      "sha256": "3f71d5034bb694204a239a6f1ebcf323ac3c5b059de02259235e2016a1a5e2dc"
+    },
+    "xhtml2pdf-0.2.26-py3-none-any.whl": {
+      "url": "https://files.pythonhosted.org/packages/f9/2f/12a7fc94fbc49e6467dc3ca2cc16c9d6e5076007ac138f6aebd41ee1c296/xhtml2pdf-0.2.26-py3-none-any.whl",
+      "sha256": "02f4720b6161a1f990bc50ed899700af88f4a34cb116ba9fe8e6e337ef4df655"
+    }
+  }
+}

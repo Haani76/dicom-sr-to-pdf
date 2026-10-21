@@ -9,3 +9,4 @@ build/
 _site/
 # the web app page itself is source, not patient output
 !web/index.html
+.vendor-cache/

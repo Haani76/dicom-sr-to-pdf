@@ -38,7 +38,9 @@ dicom-sr-to-pdf report.dcm          # -> report.pdf
 - [Limitations](#limitations)
 - [Troubleshooting / FAQ](#troubleshooting--faq)
 - [Development](#development)
+- [Versions and rolling back](#versions-and-rolling-back)
 - [Hosting your own copy of the web app](#hosting-your-own-copy-of-the-web-app)
+- [Security and privacy (HIPAA)](SECURITY_AND_PRIVACY.md)
 - [Glossary](#glossary)
 
 ---
@@ -182,7 +184,7 @@ This tool renders that as a header, a *Findings* section, a context row "Finding
 
 Each file shows its status: converted (with page count), converted with a warning naming anything not shown, skipped (not an SR), or failed.
 
-**How it works and why it's private.** The page runs the same Python converter as the command-line tool, compiled for the browser with [Pyodide](https://pyodide.org). Your SR files are read and converted on your device. They are never uploaded, and the site has no server that could receive them. The only downloads are the converter program itself (from the Pyodide CDN and the Python package index) and this page.
+**How it works and why it's private.** The page runs the same Python converter as the command-line tool, compiled for the browser with [Pyodide](https://pyodide.org). Your SR files are read and converted on your device. They are never uploaded, and the site has no server that could receive them. The page and the converter program are downloaded **from this site only**, and the browser is instructed (Content-Security-Policy) to block any connection to anywhere else. See [SECURITY_AND_PRIVACY.md](SECURITY_AND_PRIVACY.md).
 
 Note: some mobile browsers can't show PDFs inside a page. Use **Open in new tab** or **Download** there.
 
@@ -325,8 +327,11 @@ dicom_sr_to_pdf/
 ├── report.py    SR -> HTML (header, content tree, tables, styling) and HTML -> PDF
 └── __main__.py  enables `python -m dicom_sr_to_pdf`
 web/
-├── index.html   the web app: upload, results, preview, downloads
-└── worker.js    runs report.py in the browser (Pyodide), off the main thread
+├── index.html          the web app page, with its Content-Security-Policy
+├── app.js              upload, results, preview, downloads
+├── worker.js           runs report.py in the browser (Pyodide), off the main thread
+├── build_site.py       assembles _site/, downloading and hash-checking every third-party file
+└── vendor-lock.json    pinned Pyodide runtime and Python wheels, with SHA-256 fingerprints
 tests/
 └── test_convert.py   builds synthetic SRs (fake patients) and checks the output
 ```
@@ -340,7 +345,8 @@ tests/
 
 SR files and the PDFs made from them contain **protected health information**: patient names, IDs, dates and institution.
 
-- Everything runs **locally**. The command-line tool makes no network connections, and the web app converts inside your browser without uploading your files.
+- Everything runs **locally**. The command-line tool makes no network connections, and the web app converts inside your browser without uploading your files. The browser itself blocks the web app from contacting any other server.
+- For HIPAA/GDPR reviews, see **[SECURITY_AND_PRIVACY.md](SECURITY_AND_PRIVACY.md)**: data flow, technical safeguards, and what remains your organization's responsibility.
 - Don't commit `.dcm`, `.pdf` or `.html` files to version control. The included `.gitignore` excludes them.
 - Before sharing outputs for testing or support, use anonymised SRs. The test suite generates its own fake data for this reason.
 - The PDF is a **readable rendering** of the SR, **not a signed clinical report**, and it says so in every footer. Clinical sign-off belongs in your reporting system.
@@ -388,19 +394,46 @@ pytest
 
 Tests build synthetic SRs with fake patients. These cover common content plus rare cases (coordinates, time points, by-reference items, nested findings, non-numeric measurements, and an unknown value type), so no real data is needed.
 
-## Hosting your own copy of the web app
+## Versions and rolling back
 
-The web app is static files (`web/index.html`, `web/worker.js`, plus the converter's `report.py` and `__init__.py`), so any static host works, free.
+Every release is tagged: `v1.0.0`, `v1.1.0`, ... (see the repository's *Tags*). Each tag is a complete snapshot of the tool: website, converter and docs.
 
-**GitHub Pages (used by this repo).** `.github/workflows/pages.yml` runs the tests, assembles the site and publishes it on every push to `main`. One-time setup in a fork: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. The site appears at `https://<user>.github.io/<repo>/`.
+**Switch the live website to any version, older or newer:**
 
-**Cloudflare Pages / Netlify / any static host.** Use this build command, with `_site` as the output directory:
+1. Open the repository's **Actions** tab → **Deploy web app** → **Run workflow**.
+2. Enter the version, e.g. `v1.0.0`, and click **Run workflow**.
+3. About 2 minutes later the site serves exactly that version. The footer shows the converter version.
+
+To return to the latest version, run the workflow with the field left empty. Note that **any push to `main` also publishes the latest version**, so after a rollback, avoid pushing to `main` until you're ready to move forward.
+
+**Command-line tool at a specific version:**
 
 ```bash
-mkdir -p _site/dicom_sr_to_pdf && cp web/* _site/ && cp dicom_sr_to_pdf/__init__.py dicom_sr_to_pdf/report.py _site/dicom_sr_to_pdf/
+pip install --force-reinstall "git+https://github.com/Haani76/dicom-sr-to-pdf@v1.0.0"
 ```
 
-**Locally**, for development: run that command, then `python -m http.server -d _site` and open <http://localhost:8000>. Opening `index.html` directly from disk won't work, because browsers block web workers on `file://`.
+**Making a new release:** bump `__version__` in `dicom_sr_to_pdf/__init__.py`, commit, then tag and push:
+
+```bash
+git tag -a v1.2.0 -m "v1.2.0: what changed"
+git push origin v1.2.0
+```
+
+## Hosting your own copy of the web app
+
+The web app is a static site, so any static host works, free. `web/build_site.py` assembles it into `_site/`: the page, the converter, and the Python runtime and packages, which it downloads and checks against the SHA-256 fingerprints in `web/vendor-lock.json`. It refuses to build if anything doesn't match. It needs only Python 3.9+.
+
+```bash
+python web/build_site.py
+```
+
+**GitHub Pages (used by this repo).** `.github/workflows/pages.yml` runs the tests, builds and publishes on every push to `main`, and can publish any tagged version on demand (see above). One-time setup in a fork: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. The site appears at `https://<user>.github.io/<repo>/`.
+
+**Cloudflare Pages / Netlify / an internal web server.** Build command `python web/build_site.py`, output directory `_site`. For a fully offline intranet copy, build once on a machine with internet access and copy `_site/` to the internal server.
+
+**Locally**, for development: `python web/build_site.py`, then `python -m http.server -d _site` and open <http://localhost:8000>. Opening `index.html` straight from disk won't work.
+
+**Upgrading the runtime or packages:** edit the pins at the top of `web/build_site.py`, run `python web/build_site.py --lock` to re-resolve them and record new fingerprints, test, then commit `web/vendor-lock.json`.
 
 ## Glossary
 

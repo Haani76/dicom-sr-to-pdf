@@ -1,24 +1,25 @@
 // Runs the Python converter (dicom_sr_to_pdf) in the browser with Pyodide.
-// Files are processed here, in the visitor's browser; nothing is uploaded anywhere.
-importScripts("https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js");
+// app.js starts this from a blob: URL, so the page's Content-Security-Policy also governs this
+// worker (no network access except this site), and prepends `const BASE = "<site url>"`.
+// Every file below comes from this site and was hash-checked at build time (web/vendor-lock.json).
+importScripts(BASE + "pyodide/pyodide.js");
 
 const step = (n, label) => postMessage({ type: "progress", step: n, of: 4, label });
 
 const ready = (async () => {
   step(1, "Starting the Python engine");
-  const py = await loadPyodide();
+  const py = await loadPyodide({ indexURL: BASE + "pyodide/" });
   step(2, "Loading the DICOM reader");
-  await py.loadPackage(["micropip", "pillow", "ssl"]);
-  const micropip = py.pyimport("micropip");
-  await micropip.install(["pydicom==3.0.2", "reportlab==5.0.1", "html5lib", "pypdf", "arabic-reshaper"]);
+  await py.loadPackage(["pillow", "ssl", "html5lib", "charset-normalizer"]);
+  const { wheels } = await (await fetch(BASE + "vendor.json")).json();
   step(3, "Loading the PDF writer");
-  // xhtml2pdf's svglib dependency needs an lxml newer than Pyodide ships; reports contain no SVG.
-  await micropip.install.callKwargs("xhtml2pdf==0.2.26", { deps: false });
+  // xhtml2pdf's optional svglib dependency is not shipped; reports contain no SVG.
+  await py.loadPackage(wheels.map((w) => BASE + "wheels/" + w));
 
   step(4, "Preparing the converter");
   py.FS.mkdirTree("/app/dicom_sr_to_pdf");
   for (const f of ["__init__.py", "report.py"]) {
-    const res = await fetch(`dicom_sr_to_pdf/${f}`);
+    const res = await fetch(`${BASE}dicom_sr_to_pdf/${f}`);
     if (!res.ok) throw new Error(`could not load converter file ${f} (${res.status})`);
     py.FS.writeFile(`/app/dicom_sr_to_pdf/${f}`, await res.text());
   }
